@@ -1,0 +1,46 @@
+services:
+  backend:
+    build:
+      context: ./ico-server
+      target: backend-final
+    image: ezlixp/wynn-bridge:backend-final
+    restart: on-failure:5
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://backend:3000/api/v3/healthz', res =>
+          res.statusCode === 200 ? process.exit(0) :
+          process.exit(1)).on('error', () => process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+    labels:
+      traefik.http.routers.backend.rule: Host(`${HOST_NAME}`) && (PathPrefix(`/api`) || PathPrefix(`/socket.io`))
+      traefik.http.services.backend.loadbalancer.server.port: 3000
+
+  bot:
+    build:
+      context: ./ogybot-discord
+      target: bot-final
+    image: ezlixp/wynn-bridge:bot-final
+    restart: unless-stopped
+    # for some reason this causes issues sometimes with appsettings not working.
+    depends_on:
+      backend:
+        condition: service_healthy
+  proxy:
+    image: traefik:latest
+    command: --providers.docker
+    ports:
+      - 80:80
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  mongo-data:
